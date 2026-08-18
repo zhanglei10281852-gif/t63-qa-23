@@ -100,16 +100,10 @@ func (s Service) StartTrip(ctx context.Context, input StartTripInput) (trip.Trip
 	if input.IdempotencyKey == "" {
 		return trip.Trip{}, apperror.Validation(fmt.Errorf("idempotency key is required"))
 	}
-	existing, found, err := s.Store.FindTripByKey(ctx, input.VehicleID, input.IdempotencyKey)
-	if err != nil {
+	if existing, found, err := s.Store.FindTripByKey(ctx, input.VehicleID, input.IdempotencyKey); err != nil {
 		return trip.Trip{}, apperror.Wrap("find idempotent trip", err)
-	}
-	if found && existing.ID == "" {
-		return trip.Trip{}, apperror.Conflict(apperror.ErrConflict)
-	}
-	if found {
-		// Continue through the workflow so the latest state is reconstructed.
-		_ = existing
+	} else if found {
+		return existing, nil
 	}
 	var result trip.Trip
 	err := s.Store.WithTx(ctx, func(ctx context.Context, tx repository.Tx) error {

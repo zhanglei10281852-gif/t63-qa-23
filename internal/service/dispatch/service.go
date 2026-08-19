@@ -104,15 +104,15 @@ func (s Service) StartTrip(ctx context.Context, input StartTripInput) (trip.Trip
 	if err != nil {
 		return trip.Trip{}, apperror.Wrap("find idempotent trip", err)
 	}
-	if found && existing.ID == "" {
-		return trip.Trip{}, apperror.Conflict(apperror.ErrConflict)
-	}
 	if found {
-		// Continue through the workflow so the latest state is reconstructed.
-		_ = existing
+		// Idempotent replay: return the trip created by the original request.
+		// FindTripByKey reads the current row, so this reflects the latest
+		// persisted state without re-running the workflow, which would re-apply
+		// the shift/vehicle state transitions and conflict with itself.
+		return existing, nil
 	}
 	var result trip.Trip
-	err := s.Store.WithTx(ctx, func(ctx context.Context, tx repository.Tx) error {
+	err = s.Store.WithTx(ctx, func(ctx context.Context, tx repository.Tx) error {
 		now := s.Clock.Now()
 		shift, err := tx.GetShift(ctx, input.ShiftID)
 		if err != nil {
